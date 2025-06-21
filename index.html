@@ -1,0 +1,114 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Gerador de Chaveiro Flexível</title>
+  <script src="https://openjscad.org/webgui/latest/openjscad.min.js"></script>
+  <style>
+    body {font-family: Arial; background-color: #f9f9f9; padding: 20px;}
+    .container {background: white; padding: 20px; border-radius: 10px;
+      box-shadow: 2px 2px 10px #ccc; max-width: 1000px; margin: auto;}
+    h1 {color: green; text-align: center;}
+    label {display: block; margin-top: 10px; font-weight: bold;}
+    input, select {width: 100%; padding: 8px; margin-top: 4px;}
+    button {margin-top: 15px; padding: 10px 20px; background: green;
+      color: white; border: none; cursor: pointer; border-radius: 5px;}
+    button:hover {background: darkgreen;}
+    #viewer {width: 100%; height: 500px; border: 1px solid #ccc; margin-top: 20px;}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Gerador de Chaveiro Flexível</h1>
+    <label>Texto ou Emoji:</label>
+    <input type="text" id="texto" value="SAR">
+    <label>Formato:</label>
+    <select id="formato">
+      <option value="retangular">Retangular</option>
+      <option value="oval">Oval</option>
+      <option value="circular">Circular</option>
+    </select>
+    <label>Tipo do Texto:</label>
+    <select id="textoEstilo">
+      <option value="alto">Alto relevo</option>
+      <option value="baixo">Baixo relevo</option>
+      <option value="vazado">Vazado</option>
+    </select>
+    <label>Tipo de Malha:</label>
+    <select id="malha">
+      <option value="favo">Favo de Mel</option>
+      <option value="zigzag">Zigue-zague</option>
+    </select>
+    <button onclick="gerar()">Gerar Chaveiro</button>
+    <button onclick="baixarSTL()">Baixar STL</button>
+    <div id="viewer"></div>
+  </div>
+  <script>
+    let viewer = new JSCADViewer('viewer');
+    function gerar() {
+      const texto = document.getElementById('texto').value;
+      const formato = document.getElementById('formato').value;
+      const textoEstilo = document.getElementById('textoEstilo').value;
+      const malha = document.getElementById('malha').value;
+      const script = \`
+      function main() {
+        const { cube, cylinder, hull, union, subtract } = require('@jscad/modeling').primitives;
+        const { translate } = require('@jscad/modeling').transforms;
+        const { extrudeLinear } = require('@jscad/modeling').extrusions;
+        const { textToPaths } = require('@jscad/modeling').text;
+        const { measureBoundingBox } = require('@jscad/modeling').measurements;
+        const largura = 80;
+        const altura = 30;
+        const espessura = 2;
+        let base;
+        if ("${formato}" === "retangular") {
+          base = cube({size: [largura, altura, espessura]});
+        } else if ("${formato}" === "oval") {
+          base = hull(
+            translate([0,0,0], cylinder({height: espessura, radius: altura/2})),
+            translate([largura,0,0], cylinder({height: espessura, radius: altura/2}))
+          );
+        } else {
+          const raio = Math.max(largura, altura)/2;
+          base = cylinder({height: espessura, radius: raio});
+        }
+        let buracos = [];
+        const step = 8;
+        for(let x=5; x<largura; x+=step) {
+          for(let y=5; y<altura; y+=step) {
+            if ("${malha}" === "favo") {
+              buracos.push(translate([x, y, 0], cylinder({height: espessura+1, radius:2.5})));
+            } else {
+              buracos.push(translate([x, y, 0], cube({size:[2,2,espessura+1]})));
+            }
+          }
+        }
+        const baseComMalha = subtract(base, ...buracos);
+        const textoGeom = textToPaths({text: "${texto}", size: 12});
+        const textoBounds = measureBoundingBox(textoGeom);
+        const textoWidth = textoBounds[1][0] - textoBounds[0][0];
+        const textoHeight = textoBounds[1][1] - textoBounds[0][1];
+        let texto3D = extrudeLinear({height: 2}, textoGeom);
+        texto3D = translate([largura/2 - textoWidth/2, altura/2 - textoHeight/2, espessura], texto3D);
+        let resultado;
+        if ("${textoEstilo}" === "alto") {
+          resultado = union(baseComMalha, texto3D);
+        } else if ("${textoEstilo}" === "baixo") {
+          resultado = subtract(baseComMalha, translate([0,0,-0.1], texto3D));
+        } else {
+          resultado = subtract(baseComMalha, texto3D);
+        }
+        const furo = translate([largura-5, altura/2, 0], cylinder({height: espessura+1, radius:3}));
+        resultado = subtract(resultado, furo);
+        return resultado;
+      }
+      \`;
+      viewer.setJsCad(script);
+    }
+    function baixarSTL() {
+      viewer.downloadStl();
+    }
+  </script>
+</body>
+</html>
